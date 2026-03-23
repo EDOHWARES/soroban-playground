@@ -16,7 +16,12 @@ app.use("/api/deploy", deployRoute);
 app.use("/api/invoke", invokeRoute);
 
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", message: "Soroban Playground API is running" });
+  res.json({
+    status: "ok",
+    message: "Soroban Playground API is running",
+    timestamp: new Date().toISOString(),
+    service: "soroban-playground-backend"
+  });
 });
 
 app.listen(PORT, () => {
