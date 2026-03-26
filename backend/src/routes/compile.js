@@ -2,24 +2,28 @@ import express from "express";
 import { exec } from "child_process";
 import fs from "fs/promises";
 import path from "path";
+import config from "../config/index.js";
 
 const router = express.Router();
 
 router.post("/", async (req, res) => {
   const { code } = req.body;
-  if (!code) {
-    return res.status(400).json({ error: "No code provided" });
-  }
+  if (!code) return res.status(400).json({ error: "No code provided" });
 
-  // Define a temporary working directory for this compilation
-  const tempDir = path.resolve(process.cwd(), ".tmp_compile_" + Date.now());
+  // Unique temp directory per compile
+  const uniqueSuffix =
+    Date.now() + "_" + Math.random().toString(36).substring(2, 8);
+  const tempDir = path.resolve(
+    process.cwd(),
+    config.compile.tempDirPrefix + uniqueSuffix,
+  );
 
   try {
     // Scaffold a temp Rust project
     await fs.mkdir(tempDir, { recursive: true });
     await fs.mkdir(path.join(tempDir, "src"), { recursive: true });
 
-    // Write Cargo.toml
+    // Write Cargo.toml using configured soroban-sdk version
     const cargoToml = `
 [package]
 name = "soroban_contract"
@@ -30,7 +34,7 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-soroban-sdk = "20.0.0"
+soroban-sdk = "${config.compile.sorobanSdkVersion}"
 
 [profile.release]
 opt-level = "z"
@@ -47,15 +51,13 @@ lto = true
     // Write the contract code
     await fs.writeFile(path.join(tempDir, "src", "lib.rs"), code);
 
-    // Execute Soroban CLI (or cargo block)
-    // Note: In a real server you might queue these or containerize. Here we spawn.
-    const command = `cargo build --target wasm32-unknown-unknown --release`;
+    // Build command and timeout come from config
+    const command = config.compile.command;
 
     exec(
       command,
-      { cwd: tempDir, timeout: 30000 },
+      { cwd: tempDir, timeout: config.compile.timeoutMs },
       async (err, stdout, stderr) => {
-        // Setup cleanup task
         const cleanUp = async () => {
           try {
             await fs.rm(tempDir, { recursive: true, force: true });
@@ -77,14 +79,12 @@ lto = true
         // Check if wasm exists
         const wasmPath = path.join(
           tempDir,
-          "target",
-          "wasm32-unknown-unknown",
-          "release",
-          "soroban_contract.wasm",
+          ...config.compile.wasmTargetSubpath.split("/"),
+          config.compile.wasmFilename,
         );
+
         try {
           const fileStats = await fs.stat(wasmPath);
-          // It's built successfully
           await cleanUp();
           return res.json({
             success: true,
@@ -94,7 +94,7 @@ lto = true
               .split("\n")
               .filter((l) => l.trim()),
             artifact: {
-              name: "soroban_contract.wasm",
+              name: config.compile.wasmFilename,
               sizeBytes: fileStats.size,
               createdAt: fileStats.birthtime,
             },
