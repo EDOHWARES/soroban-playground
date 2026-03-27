@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
+import morgan from "morgan";
 import os from "os";
 import fs from "fs";
 import path from "path";
@@ -16,7 +17,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-app.use(morgan("dev"));
 const PORT = process.env.PORT || 5000;
 
 // Load package.json for version info
