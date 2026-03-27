@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import os from "os";
 import fs from "fs";
@@ -8,12 +9,14 @@ import { fileURLToPath } from "url";
 import compileRoute from "./routes/compile.js";
 import deployRoute from "./routes/deploy.js";
 import invokeRoute from "./routes/invoke.js";
+import { startCleanupWorker } from "./cleanupWorker.js";
 import { notFoundHandler, errorHandler } from "./middleware/errorHandler.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+app.use(morgan("dev"));
 const PORT = process.env.PORT || 5000;
 
 // Load package.json for version info
@@ -149,6 +152,7 @@ app.use(errorHandler);
 
 app.listen(PORT, () => {
   console.log(`Backend server running on http://localhost:${PORT}`);
+  startCleanupWorker();
 });
 
 export default app;
