@@ -17,13 +17,17 @@ import Console from "@/components/Console";
 import DeployPanel from "@/components/DeployPanel";
 import CallPanel from "@/components/CallPanel";
 import StorageViewer from "@/components/StorageViewer";
-import TransactionCallGraph from "@/components/TransactionCallGraph";
+import dynamic from "next/dynamic";
 import {
   parseTransactionInvocationPayload,
   type TransactionCallGraph as TransactionCallGraphState,
   type LedgerState,
 } from "@/utils/transactionGraph";
 import { Sparkles, Code2, BookOpen } from "lucide-react";
+
+const TransactionCallGraph = dynamic(() => import("@/components/TransactionCallGraph"), {
+  ssr: false,
+});
 
 const DEFAULT_CODE = `#![no_std]
 use soroban_sdk::{contract, contractimpl, symbol_short, Env, Symbol};
