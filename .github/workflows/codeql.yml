@@ -1,10 +1,7 @@
 name: "CodeQL Security Analysis"
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch: # Changed from push/pull_request to skip automatic runs
 
 permissions:
   security-events: write
