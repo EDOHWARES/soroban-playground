@@ -25,6 +25,7 @@ import TransactionStatus from "@/components/TransactionStatus";
 import VestingDashboard, { VestingScheduleData } from "@/components/VestingDashboard";
 import IdentityPortal, { IdentityData } from "@/components/IdentityPortal";
 import CarbonCreditDashboard, { IssuerData, CarbonAssetData } from "@/components/CarbonCreditDashboard";
+import SocialFeedInterface, { SocialProfile, SocialPost } from "@/components/SocialFeedInterface";
 import LendingDashboard from "@/components/LendingDashboard";
 import FlashLoanPanel from "@/components/FlashLoanPanel";
 import CloudStoragePanel from "@/components/CloudStoragePanel";
@@ -334,6 +335,10 @@ export default function Home() {
   const [carbonIssuer, setCarbonIssuer] = useState<IssuerData>();
   const [carbonAssets, setCarbonAssets] = useState<CarbonAssetData>({ balance: 0, totalRetired: 0, totalOwned: 0 });
   const [isCarbonLoading, setIsCarbonLoading] = useState(false);
+  // Social Media state
+  const [socialProfile, setSocialProfile] = useState<SocialProfile>();
+  const [socialPosts, setSocialPosts] = useState<SocialPost[]>([]);
+  const [isSocialLoading, setIsSocialLoading] = useState(false);
 
   // Wallet + transaction tracking
   const wallet = useFreighterWallet();
@@ -1241,6 +1246,7 @@ export default function Home() {
   };
 
   const handleAdjustReputation = async (subject: string, delta: number) => {
+    // ... (existing implementation)
     if (!contractId) return;
     const txId = addTx(`Adjust reputation for ${subject.slice(0, 8)}… (${delta > 0 ? "+" : ""}${delta})`);
     setIsIdentityLoading(true);
@@ -1382,6 +1388,98 @@ export default function Home() {
       updateTx(txId, { status: "error", error: formatApiError(error) });
     } finally {
       setIsCarbonLoading(false);
+  // ── Social Media handlers ──────────────────────────────────────────────────
+
+  const handleRegisterSocialProfile = async (nickname: string, bio: string) => {
+    if (!contractId || !wallet.address) return;
+    const txId = addTx(`Create Social Profile: ${nickname}`);
+    setIsSocialLoading(true);
+    try {
+      await requestJson("/api/invoke", {
+        contractId,
+        functionName: "create_profile",
+        args: { user: wallet.address, nickname, bio },
+      });
+      setSocialProfile({
+        address: wallet.address,
+        nickname,
+        bio,
+        followers: 0,
+      });
+      updateTx(txId, { status: "success" });
+      appendLog(`[social] Profile created: ${nickname}`);
+    } catch (error) {
+      updateTx(txId, { status: "error", error: formatApiError(error) });
+    } finally {
+      setIsSocialLoading(false);
+    }
+  };
+
+  const handleCreatePost = async (content: string) => {
+    if (!contractId || !wallet.address) return;
+    const txId = addTx(`Post: "${content.slice(0, 20)}..."`);
+    setIsSocialLoading(true);
+    try {
+      const payload = await requestJson<{ output: string }>("/api/invoke", {
+        contractId,
+        functionName: "create_post",
+        args: { author: wallet.address, content_hash: content },
+      });
+      const postId = payload.output;
+      setSocialPosts(prev => [{
+        id: postId,
+        author: wallet.address!,
+        nickname: socialProfile?.nickname,
+        content,
+        timestamp: Math.floor(Date.now() / 1000),
+        likes: 0,
+        tips: 0,
+      }, ...prev]);
+      updateTx(txId, { status: "success" });
+      appendLog(`[social] Post created ID: ${postId}`);
+    } catch (error) {
+      updateTx(txId, { status: "error", error: formatApiError(error) });
+    } finally {
+      setIsSocialLoading(false);
+    }
+  };
+
+  const handleLikePost = async (postId: string) => {
+    if (!contractId || !wallet.address) return;
+    const txId = addTx(`Like post #${postId}`);
+    setIsSocialLoading(true);
+    try {
+      await requestJson("/api/invoke", {
+        contractId,
+        functionName: "like_post",
+        args: { user: wallet.address, post_id: postId },
+      });
+      setSocialPosts(prev => prev.map(p => p.id === postId ? { ...p, likes: p.likes + 1 } : p));
+      updateTx(txId, { status: "success" });
+    } catch (error) {
+      updateTx(txId, { status: "error", error: formatApiError(error) });
+    } finally {
+      setIsSocialLoading(false);
+    }
+  };
+
+  const handleTipPost = async (postId: string, amount: number) => {
+    if (!contractId || !wallet.address) return;
+    const txId = addTx(`Tip ${amount} to post #${postId}`);
+    setIsSocialLoading(true);
+    try {
+      await requestJson("/api/invoke", {
+        contractId,
+        functionName: "tip_post",
+        args: { from: wallet.address, post_id: postId, amount: String(amount) },
+      });
+      setSocialPosts(prev => prev.map(p => p.id === postId ? { ...p, tips: p.tips + amount } : p));
+      updateTx(txId, { status: "success" });
+      appendLog(`[social] Tipped ${amount} units for post #${postId}`);
+    } catch (error) {
+      updateTx(txId, { status: "error", error: formatApiError(error) });
+    } finally {
+      setIsSocialLoading(false);
     }
   };
 
@@ -1727,6 +1825,14 @@ export default function Home() {
               onMint={handleMintCredits}
               onTransfer={handleTransferCredits}
               onRetire={handleRetireCredits}
+            <SocialFeedInterface
+              isLoading={isSocialLoading}
+              profile={socialProfile}
+              posts={socialPosts}
+              onRegisterProfile={handleRegisterSocialProfile}
+              onCreatePost={handleCreatePost}
+              onLikePost={handleLikePost}
+              onTipPost={handleTipPost}
             />
             <LendingDashboard />
             <FlashLoanPanel />
